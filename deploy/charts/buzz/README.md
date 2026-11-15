@@ -631,9 +631,16 @@ default so long-lived WebSocket connections have time to drain.
 
 ## Upgrades
 
-Schema migrations are embedded in the relay binary via `sqlx::migrate!` and run at startup, gated by `BUZZ_AUTO_MIGRATE` (default `true`). Multiple replicas race-safely behind a Postgres advisory lock. `helm upgrade` is the entire upgrade procedure.
+Schema migrations are embedded in the relay binary via `sqlx::migrate!` and run at startup, gated by `BUZZ_AUTO_MIGRATE` (default `true`). Multiple replicas race-safely behind a Postgres advisory lock. Outside the required stops below, `helm upgrade` is the entire upgrade procedure.
 
-Migration 0032 is a hard compatibility boundary for relay versions that publish repaired channel rosters. Older relays verify its roster-fence trigger before opening listeners and refuse to start if the trigger is missing or inert. Newer relays run the same check in every roster writer and do not require the trigger. A later release drops it, and that release requires every relay to run a version without the startup check first. Apply migrations before rolling the relay; for large installations, prefer a controlled `buzz-admin migrate` job with PostgreSQL lock monitoring before the code rollout.
+**Required stop: `relay-v0.3.0` before migration 0089.** Migration 0089 drops the 0032 roster-fence trigger. Before you upgrade to any release that contains 0089, every serving relay and every rollback target must run `relay-v0.3.0` or later. Upgrade to `relay-v0.3.0` first, let the rollout finish, then upgrade past it. Do not upgrade directly from `relay-v0.2.1` or older.
+
+A direct upgrade breaks in two ways:
+
+- **Startup.** Untagged `main` builds that contain migration 0032 but predate `relay-v0.3.0` check for the trigger before they open listeners and refuse to start without it. After 0089 runs, such a pod cannot start, whether it restarts during the rollout or is a rollback target. (`relay-v0.2.1` and older predate migration 0032 and have no such check.)
+- **Mixed writers.** With auto-migration on, the first new pod applies 0089 while old pods still serve. Relays older than `relay-v0.3.0` do not check kind:39002 roster snapshots against channel membership in the application, so once the trigger is gone they can save stale roster snapshots.
+
+Apply migrations before rolling the relay; for large installations, prefer a controlled `buzz-admin migrate` job with PostgreSQL lock monitoring before the code rollout.
 
 If you prefer decoupling migrations from serving, set `migrate.autoMigrate=false`. **In that mode the chart does not run migrations for you** — you own running `buzz-admin migrate` (separate Pod / one-shot Job) against the database before every `helm install` / `helm upgrade`. Readiness probes only verify DB connectivity, not schema freshness, so a pod will appear healthy against an unmigrated schema and fail under load. A pre-upgrade Helm Job for this is on the chart roadmap; the values knob `migrate.preUpgradeJob.enabled` is reserved.
 
