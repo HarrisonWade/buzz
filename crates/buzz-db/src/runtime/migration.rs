@@ -902,7 +902,7 @@ mod postgres_tests {
         let mut migrations: Vec<_> = MIGRATOR.iter().collect();
         migrations.sort_by_key(|migration| migration.version);
 
-        assert_eq!(migrations.len(), 88);
+        assert_eq!(migrations.len(), 89);
         assert!(migrations[83]
             .sql
             .as_str()
@@ -923,6 +923,10 @@ mod postgres_tests {
             .sql
             .as_str()
             .contains("VALIDATE CONSTRAINT workflow_runs_cause_pubkey_check"));
+        assert!(migrations[88]
+            .sql
+            .as_str()
+            .contains("ADD COLUMN platform TEXT NOT NULL DEFAULT 'ios'"));
         for (index, migration) in migrations.iter().enumerate() {
             assert_eq!(migration.version, (index + 1) as i64);
         }
@@ -3066,6 +3070,7 @@ mod postgres_tests {
             "entity_deletion_stage_history",
             "user_deletion_fences",
             "workflow_runs",
+            "push_gateway_installations",
         ] {
             assert_eq!(
                 columns(&desired, table).await,
@@ -3130,6 +3135,7 @@ mod postgres_tests {
             "user_deletion_fences",
             "entity_deletion_approvals",
             "workflow_runs",
+            "push_gateway_installations",
         ] {
             assert_eq!(
                 constraints(&desired, table).await,
